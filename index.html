@@ -98,7 +98,8 @@
   </nav>
 
   <a id="top" href="#top-anchor" aria-label="Back to top">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    <svg class="top-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+    <span class="top-mono monogram" aria-hidden="true">AR</span>
   </a>
 
   <span id="top-anchor"></span>
@@ -131,6 +132,7 @@
       <p class="hero-date">Thursday, 10 September 2026</p>
       <div class="hero-cta">
         <a href="#invitation" class="btn btn--gold">View Invitation</a>
+        <a href="#events" class="btn btn--ghost">View Events</a>
         <a href="#wishes" class="btn btn--ghost">Leave a Wish</a>
       </div>
     </div>
@@ -275,15 +277,21 @@
       <p class="eyebrow" style="justify-content:center"><svg class="ico ico--gold"><use href="#ic-camera"/></svg>Our Moments</p>
       <h2 class="serif">A few memories before we begin forever.</h2>
     </div>
-    <div class="strip-mask" data-r>
-      <div class="strip" id="strip">
-        <figure class="shot"><img src="assets/gallery/photo1.jpg" loading="lazy" decoding="async" alt="Gallery photo 1" /></figure>
-        <figure class="shot"><img src="assets/gallery/photo2.jpg" loading="lazy" decoding="async" alt="Gallery photo 2" /></figure>
-        <figure class="shot"><img src="assets/gallery/photo3.jpg" loading="lazy" decoding="async" alt="Gallery photo 3" /></figure>
-        <figure class="shot"><img src="assets/gallery/photo4.jpg" loading="lazy" decoding="async" alt="Gallery photo 4" /></figure>
-        <figure class="shot"><img src="assets/gallery/photo5.jpg" loading="lazy" decoding="async" alt="Gallery photo 5" /></figure>
-        <figure class="shot"><img src="assets/gallery/photo6.jpg" loading="lazy" decoding="async" alt="Gallery photo 6" /></figure>
+    <div class="deck" id="deck" data-r>
+      <button type="button" class="deck-nav deck-prev" aria-label="Previous photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="deck-stage" id="deck-stage">
+        <figure class="card"><img src="assets/gallery/photo1.jpg" loading="lazy" decoding="async" alt="Gallery photo 1" /></figure>
+        <figure class="card"><img src="assets/gallery/photo2.jpg" loading="lazy" decoding="async" alt="Gallery photo 2" /></figure>
+        <figure class="card"><img src="assets/gallery/photo3.jpg" loading="lazy" decoding="async" alt="Gallery photo 3" /></figure>
+        <figure class="card"><img src="assets/gallery/photo4.jpg" loading="lazy" decoding="async" alt="Gallery photo 4" /></figure>
+        <figure class="card"><img src="assets/gallery/photo5.jpg" loading="lazy" decoding="async" alt="Gallery photo 5" /></figure>
+        <figure class="card"><img src="assets/gallery/photo6.jpg" loading="lazy" decoding="async" alt="Gallery photo 6" /></figure>
       </div>
+      <button type="button" class="deck-nav deck-next" aria-label="Next photo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
     </div>
     <div class="dots" id="dots">
       <button type="button" class="on" aria-label="Show photo 1"><span></span></button>
@@ -420,6 +428,10 @@
         var y = window.scrollY;
         nav.classList.toggle("scrolled", y > 40);
         top.classList.toggle("show", y > window.innerHeight * 0.6);
+        // Elongate the pill in proportion to how far down the page we are.
+        var max = document.documentElement.scrollHeight - window.innerHeight;
+        var p = max > 0 ? Math.min(Math.max(y / max, 0), 1) : 0;
+        top.style.height = (3.4 + p * 4.2) + "rem";   // 3.4rem → 7.6rem
       }
       window.addEventListener("scroll", function () { requestAnimationFrame(onScroll); }, { passive: true });
       onScroll();
@@ -474,7 +486,7 @@
     // ---------- Countdown ----------
     function initCountdown() {
       var el = document.getElementById("countdown");
-      var weddingStart = +new Date("2026-09-10T12:05:00+05:30");
+      var weddingStart = +new Date("2026-09-10T00:00:00+05:30");
       var weddingDayEnd = +new Date("2026-09-11T00:00:00+05:30");
       function render() {
         var now = +new Date(), diff = weddingStart - now;
@@ -521,63 +533,75 @@
       });
     }
 
-    // ---------- Gallery: film-strip with autoplay + free scroll + lightbox ----------
-    // Auto-advances one photo every 4s. Holding/hovering a photo (or manually
-    // swiping) pauses it; it resumes shortly after you let go. Manual scroll is
-    // always free — autoplay just nudges the strip, never the page.
+    // ---------- Gallery: stacked card-deck carousel with autoplay + lightbox ----------
+    // Cards are layered one over the others; the front card sits centred while the
+    // rest fan out behind it on both sides. Auto-advances every 4s (unless reduced
+    // motion), pauses on hover/off-screen/hidden/lightbox, and drives prev/next +
+    // dot controls. Clicking the front card opens the lightbox; a side card brings
+    // itself to the front.
     function initGallery() {
-      var strip = document.getElementById("strip");
-      if (!strip) return;
-      var shots = Array.prototype.slice.call(strip.querySelectorAll(".shot"));
+      var stage = document.getElementById("deck-stage");
+      if (!stage) return;
+      var cards = Array.prototype.slice.call(stage.querySelectorAll(".card"));
       var dots = Array.prototype.slice.call(document.querySelectorAll("#dots button"));
       var lb = document.getElementById("lightbox");
       var lbImg = document.getElementById("lb-img");
-      var total = shots.length, idx = 0, paused = false, inView = false, timer = null;
+      var total = cards.length, active = 0, paused = false, inView = false;
 
       // -- Lightbox --
-      shots.forEach(function (s) {
-        s.addEventListener("click", function () {
-          var img = s.querySelector("img");
-          lbImg.src = img.currentSrc || img.src;
-          lb.classList.add("open");
-        });
-      });
       function close() { lb.classList.remove("open"); lbImg.src = ""; }
       lb.addEventListener("click", close);
       document.getElementById("lb-close").addEventListener("click", function (e) { e.stopPropagation(); close(); });
       window.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
 
-      // -- Centre a given photo by scrolling only the strip (never the page) --
-      function go(i) {
-        idx = ((i % total) + total) % total;
-        var s = shots[idx];
-        var left = s.offsetLeft - (strip.clientWidth - s.offsetWidth) / 2;
-        strip.scrollTo({ left: left, behavior: reduce ? "auto" : "smooth" });
-      }
-      // -- Keep idx + active dot in sync with wherever the strip actually is --
-      function sync() {
-        var c = strip.scrollLeft + strip.clientWidth / 2, best = 0, bd = Infinity;
-        shots.forEach(function (s, i) {
-          var mid = s.offsetLeft + s.offsetWidth / 2, dd = Math.abs(mid - c);
-          if (dd < bd) { bd = dd; best = i; }
+      // -- Position every card relative to the active one --
+      function layout() {
+        cards.forEach(function (card, i) {
+          var rel = (i - active + total) % total;
+          var off = rel > total / 2 ? rel - total : rel;   // signed distance: - left, + right
+          var abs = Math.abs(off);
+          var front = off === 0;
+          if (abs > 2) {
+            card.style.transform = "translateX(" + (off > 0 ? 120 : -120) + "%) scale(.55)";
+            card.style.opacity = "0";
+            card.style.zIndex = "0";
+            card.style.pointerEvents = "none";
+          } else {
+            card.style.transform = "translateX(" + (off * 44) + "%) scale(" + (1 - abs * 0.14) + ") rotate(" + (off * 4) + "deg)";
+            card.style.opacity = front ? "1" : (0.55 - (abs - 1) * 0.22).toFixed(2);
+            card.style.zIndex = String(30 - abs);
+            card.style.pointerEvents = "auto";
+          }
+          card.classList.toggle("is-front", front);
         });
-        idx = best;
-        dots.forEach(function (d, i) { d.classList.toggle("on", i === best); });
+        dots.forEach(function (d, i) { d.classList.toggle("on", i === active); });
       }
-      strip.addEventListener("scroll", function () { requestAnimationFrame(sync); }, { passive: true });
+      function go(i) { active = ((i % total) + total) % total; layout(); }
+
+      // -- Controls --
+      cards.forEach(function (card, i) {
+        card.addEventListener("click", function () {
+          if (card.classList.contains("is-front")) {
+            var img = card.querySelector("img");
+            lbImg.src = img.currentSrc || img.src;
+            lb.classList.add("open");
+          } else { go(i); }
+        });
+      });
       dots.forEach(function (d, i) { d.addEventListener("click", function () { go(i); }); });
+      var prev = document.querySelector(".deck-prev"), next = document.querySelector(".deck-next");
+      if (prev) prev.addEventListener("click", function () { go(active - 1); });
+      if (next) next.addEventListener("click", function () { go(active + 1); });
 
-      // -- Autoplay every 4s, unless paused / off-screen / lightbox open --
-      function tick() { if (!paused && inView && !lb.classList.contains("open")) go(idx + 1); }
-      timer = setInterval(tick, 4000);
-
-      // Hold or hover pauses; releasing resumes after a short beat.
-      ["pointerenter", "pointerdown", "touchstart"].forEach(function (ev) {
-        strip.addEventListener(ev, function () { paused = true; }, { passive: true });
-      });
-      ["pointerleave", "pointerup", "touchend", "touchcancel"].forEach(function (ev) {
-        strip.addEventListener(ev, function () { setTimeout(function () { paused = false; }, 700); }, { passive: true });
-      });
+      // -- Autoplay every 4s, unless paused / off-screen / lightbox open / reduced motion --
+      if (!reduce) {
+        setInterval(function () {
+          if (!paused && inView && !lb.classList.contains("open")) go(active + 1);
+        }, 4000);
+      }
+      var deck = document.getElementById("deck");
+      deck.addEventListener("pointerenter", function () { paused = true; });
+      deck.addEventListener("pointerleave", function () { paused = false; });
       document.addEventListener("visibilitychange", function () { paused = document.hidden; });
 
       if ("IntersectionObserver" in window) {
@@ -585,7 +609,7 @@
         io.observe(document.getElementById("gallery"));
       } else { inView = true; }
 
-      sync();
+      layout();
     }
 
     // ---------- Wishes form (Netlify) ----------
